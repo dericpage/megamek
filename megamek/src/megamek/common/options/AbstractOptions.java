@@ -29,6 +29,7 @@ public abstract class AbstractOptions implements IOptions, Serializable {
      *
      */
     private static final long serialVersionUID = 6406883135074654379L;
+
     private final Hashtable<String, IOption> optionsHash = new Hashtable<>();
 
     AbstractOptions() {

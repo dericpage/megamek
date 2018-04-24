@@ -26,43 +26,43 @@ import java.util.Vector;
  */
 public class AbstractOptionsInfo implements IOptionsInfo {
 
-    protected final static String GROUP_SUFFIX = ".group."; //$NON-NLS-1$
-    protected final static String OPTION_SUFFIX = ".option."; //$NON-NLS-1$
-    protected final static String DISPLAYABLE_NAME_SUFFIX = ".displayableName"; //$NON-NLS-1$
-    protected final static String DESCRIPTION_SUFFIX = ".description"; //$NON-NLS-1$
+    private final static String GROUP_SUFFIX = ".group."; //$NON-NLS-1$
+    private final static String OPTION_SUFFIX = ".option."; //$NON-NLS-1$
+    private final static String DISPLAYABLE_NAME_SUFFIX = ".displayableName"; //$NON-NLS-1$
+    private final static String DESCRIPTION_SUFFIX = ".description"; //$NON-NLS-1$
 
     /**
      * The OptionsInfo name that must be unique. Every instance of the
      * AbstractOptionsInfo must have unique name, it's used to query the NLS
      * dependent information from the common resource bundle.
-     * 
-     * @see getOptionDisplayableName
-     * @see getGroupDisplayableName
-     * @see getOptionDescription
+     *
+     * @see #getOptionDisplayableName(String)
+     * @see #getGroupDisplayableName(String)
+     * @see #getOptionDescription(String)
      */
-    private String name;
+    private final String name;
 
     /**
      * Hashtable of the <code>OptionInfo</code> used to store/find option
      * info.
      */
-    private Hashtable<String, OptionInfo> optionsHash = new Hashtable<String, OptionInfo>();
+    private final Hashtable<String, OptionInfo> optionsHash = new Hashtable<>();
 
     /**
      * List of option groups. The order of groups is important. The first group
      * added by <code>addGroup</code> is the first in the
      * <code>Enumeration</code> returned by <code>getGroups</code>
      */
-    private Vector<IBasicOptionGroup> groups = new Vector<IBasicOptionGroup>();
+    private final Vector<IBasicOptionGroup> groups = new Vector<>();
 
     /**
      * Flag that indicates that this filling the the options info data is
      * completed. <code>addGroup</code> and <code>addOptionInfo</code> will
      * have no effect if it's <code>true</code>
-     * 
-     * @see finish
-     * @see addGroup
-     * @see addOptionInfo
+     *
+     * @see #finish()
+     * @see #addGroup(String)
+     * @see #addOptionInfo(IBasicOptionGroup, String)
      */
     private boolean finished;
 
@@ -72,7 +72,7 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * 
      * @see AbstractOptionsInfo()
      */
-    private static HashSet<String> names = new HashSet<String>();
+    private static final HashSet<String> NAMES = new HashSet<>();
 
     /**
      * Protected constructor. It is called only by descendants. The name must be
@@ -81,11 +81,12 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * 
      * @param name options info name
      */
-    protected AbstractOptionsInfo(String name) {
-        if (names.contains(name)) {
+    AbstractOptionsInfo(final String name) {
+        if (NAMES.contains(name)) {
             throw new IllegalArgumentException(
                     "OptionsInfo '" + name + "' is already registered"); //$NON-NLS-1$ //$NON-NLS-2$
         }
+        NAMES.add(name);
         this.name = name;
     }
 
@@ -94,7 +95,7 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * 
      * @see megamek.common.options.IOptionsInfo#getOptionInfo(java.lang.String)
      */
-    public IOptionInfo getOptionInfo(String name) {
+    public IOptionInfo getOptionInfo(final String name) {
         return optionsHash.get(name);
     }
 
@@ -107,22 +108,23 @@ public class AbstractOptionsInfo implements IOptionsInfo {
         return groups.elements();
     }
 
-    IBasicOptionGroup addGroup(String name) {
+    IBasicOptionGroup addGroup(final String name) {
         return addGroup(name, null);
     }
 
-    IBasicOptionGroup addGroup(String name, String key) {
+    IBasicOptionGroup addGroup(final String name,
+                               final String key) {
         IBasicOptionGroup group = null;
         if (!finished) {
             for (int i = 0; i < groups.size(); i++) {
-                IBasicOptionGroup g = groups.elementAt(i);
-                if (g != null && g.getName().equals(name)) {
+                final IBasicOptionGroup g = groups.elementAt(i);
+                if (null != g && g.getName().equals(name)) {
                     group = groups.elementAt(i);
                     break;
                 }
             }
-            if (group == null) {
-                group = (key == null ? new OptionGroup(name) : new OptionGroup(
+            if (null == group) {
+                group = (null == key ? new OptionGroup(name) : new OptionGroup(
                         name, key));
                 groups.addElement(group);
             }
@@ -130,7 +132,8 @@ public class AbstractOptionsInfo implements IOptionsInfo {
         return group;
     }
 
-    void addOptionInfo(IBasicOptionGroup group, String name) {
+    void addOptionInfo(final IBasicOptionGroup group,
+                       final String name) {
         if (!finished) {
             // TODO: I'm not happy about this cast but this is better than it
             // was before.
@@ -146,12 +149,12 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * @param groupName
      * @return group displayable name
      */
-    protected String getGroupDisplayableName(String groupName) {
+    String getGroupDisplayableName(final String groupName) {
         for (int i = 0; i < groups.size(); i++) {
-            IBasicOptionGroup g = groups.elementAt(i);
-            if (g != null && g.getName().equals(groupName)) {
+            final IBasicOptionGroup g = groups.elementAt(i);
+            if (null != g && g.getName().equals(groupName)) {
                 return Messages.getString(name + GROUP_SUFFIX + groupName
-                        + DISPLAYABLE_NAME_SUFFIX);
+                                          + DISPLAYABLE_NAME_SUFFIX);
             }
         }
         return null;
@@ -161,42 +164,43 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * Records that filling of this structure is finished. <code>addGroup</code>
      * and <code>addOptionInfo</code> will have no effect after call of this
      * function
-     * 
-     * @see addGroup
-     * @see addOptionInfo
+     *
+     * @see #addGroup(String)
+     * @see #addOptionInfo(IBasicOptionGroup, String)
      */
     void finish() {
         finished = true;
     }
 
-    private void setOptionInfo(String name, OptionInfo info) {
+    private void setOptionInfo(final String name,
+                               final OptionInfo info) {
         optionsHash.put(name, info);
     }
 
-    private String getOptionDisplayableName(String optionName) {
+    private String getOptionDisplayableName(final String optionName) {
         return Messages.getString(name + OPTION_SUFFIX + optionName
                 + DISPLAYABLE_NAME_SUFFIX);
     }
 
-    private String getOptionDescription(String optionName) {
+    private String getOptionDescription(final String optionName) {
         return Messages.getString(name + OPTION_SUFFIX + optionName
                 + DESCRIPTION_SUFFIX);
     }
 
     /**
      * Private model class to store the option info
-     * 
-     * @see addOptionInfo
-     * @see getOptionInfo
+     *
+     * @see #addOptionInfo(IBasicOptionGroup, String)
+     * @see #getOptionInfo(String)
      */
     private class OptionInfo implements IOptionInfo {
 
-        private String name;
-        private int textFieldLength = 3;
+        private final String name;
+        private static final int TEXT_FIELD_LENGTH = 3;
 
-        private boolean labelBeforeTextField = false;
+        private static final boolean LABEL_BEFORE_TEXT_FIELD = false;
 
-        public OptionInfo(String optionName) {
+        OptionInfo(final String optionName) {
             this.name = optionName;
         }
 
@@ -213,11 +217,11 @@ public class AbstractOptionsInfo implements IOptionsInfo {
         }
 
         public int getTextFieldLength() {
-            return textFieldLength;
+            return TEXT_FIELD_LENGTH;
         }
 
         public boolean isLabelBeforeTextField() {
-            return labelBeforeTextField;
+            return LABEL_BEFORE_TEXT_FIELD;
         }
 
     }
