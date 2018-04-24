@@ -18,6 +18,8 @@ import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Vector;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Abstract base class for Singletons representing Options' static information
@@ -30,6 +32,8 @@ public class AbstractOptionsInfo implements IOptionsInfo {
     private final static String OPTION_SUFFIX = ".option."; //$NON-NLS-1$
     private final static String DISPLAYABLE_NAME_SUFFIX = ".displayableName"; //$NON-NLS-1$
     private final static String DESCRIPTION_SUFFIX = ".description"; //$NON-NLS-1$
+
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     /**
      * The OptionsInfo name that must be unique. Every instance of the
@@ -64,7 +68,7 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * @see #addGroup(String)
      * @see #addOptionInfo(IBasicOptionGroup, String)
      */
-    private boolean finished;
+    private final AtomicBoolean finished = new AtomicBoolean(false);
 
     /**
      * The <code>HashSet</code> used to check if the options info is already
@@ -82,11 +86,23 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * @param name options info name
      */
     AbstractOptionsInfo(final String name) {
-        if (NAMES.contains(name)) {
-            throw new IllegalArgumentException(
-                    "OptionsInfo '" + name + "' is already registered"); //$NON-NLS-1$ //$NON-NLS-2$
+        lock.readLock().lock();
+        try {
+            if (NAMES.contains(name)) {
+                throw new IllegalArgumentException(
+                        "OptionsInfo '" + name + "' is already registered"); //$NON-NLS-1$ //$NON-NLS-2$
+            }
+        } finally {
+            lock.readLock().unlock();
         }
-        NAMES.add(name);
+        lock.writeLock().lock();
+
+        try {
+            NAMES.add(name);
+        } finally {
+            lock.writeLock().unlock();
+        }
+
         this.name = name;
     }
 
@@ -96,7 +112,12 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * @see megamek.common.options.IOptionsInfo#getOptionInfo(java.lang.String)
      */
     public IOptionInfo getOptionInfo(final String name) {
-        return optionsHash.get(name);
+        lock.readLock().lock();
+        try {
+            return optionsHash.get(name);
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     /*
@@ -105,7 +126,12 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * @see megamek.common.options.IOptionsInfo#getGroups()
      */
     public Enumeration<IBasicOptionGroup> getGroups() {
-        return groups.elements();
+        lock.readLock().lock();
+        try {
+            return groups.elements();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     IBasicOptionGroup addGroup(final String name) {
@@ -115,18 +141,23 @@ public class AbstractOptionsInfo implements IOptionsInfo {
     IBasicOptionGroup addGroup(final String name,
                                final String key) {
         IBasicOptionGroup group = null;
-        if (!finished) {
-            for (int i = 0; i < groups.size(); i++) {
-                final IBasicOptionGroup g = groups.elementAt(i);
-                if (null != g && g.getName().equals(name)) {
-                    group = groups.elementAt(i);
-                    break;
+        if (!finished.get()) {
+            lock.writeLock().lock();
+            try {
+                for (int i = 0; i < groups.size(); i++) {
+                    final IBasicOptionGroup g = groups.elementAt(i);
+                    if (null != g && g.getName().equals(name)) {
+                        group = groups.elementAt(i);
+                        break;
+                    }
                 }
-            }
-            if (null == group) {
-                group = (null == key ? new OptionGroup(name) : new OptionGroup(
-                        name, key));
-                groups.addElement(group);
+                if (null == group) {
+                    group = (null == key ? new OptionGroup(name) : new OptionGroup(
+                            name, key));
+                    groups.addElement(group);
+                }
+            } finally {
+                lock.writeLock().unlock();
             }
         }
         return group;
@@ -134,7 +165,7 @@ public class AbstractOptionsInfo implements IOptionsInfo {
 
     void addOptionInfo(final IBasicOptionGroup group,
                        final String name) {
-        if (!finished) {
+        if (!finished.get()) {
             // TODO: I'm not happy about this cast but this is better than it
             // was before.
             ((OptionGroup) group).addOptionName(name);
@@ -150,12 +181,17 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * @return group displayable name
      */
     String getGroupDisplayableName(final String groupName) {
-        for (int i = 0; i < groups.size(); i++) {
-            final IBasicOptionGroup g = groups.elementAt(i);
-            if (null != g && g.getName().equals(groupName)) {
-                return Messages.getString(name + GROUP_SUFFIX + groupName
-                                          + DISPLAYABLE_NAME_SUFFIX);
+        lock.readLock().lock();
+        try {
+            for (int i = 0; i < groups.size(); i++) {
+                final IBasicOptionGroup g = groups.elementAt(i);
+                if (null != g && g.getName().equals(groupName)) {
+                    return Messages.getString(name + GROUP_SUFFIX + groupName
+                                              + DISPLAYABLE_NAME_SUFFIX);
+                }
             }
+        } finally {
+            lock.readLock().unlock();
         }
         return null;
     }
@@ -169,12 +205,17 @@ public class AbstractOptionsInfo implements IOptionsInfo {
      * @see #addOptionInfo(IBasicOptionGroup, String)
      */
     void finish() {
-        finished = true;
+        finished.set(true);
     }
 
     private void setOptionInfo(final String name,
                                final OptionInfo info) {
-        optionsHash.put(name, info);
+        lock.writeLock().lock();
+        try {
+            optionsHash.put(name, info);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     private String getOptionDisplayableName(final String optionName) {

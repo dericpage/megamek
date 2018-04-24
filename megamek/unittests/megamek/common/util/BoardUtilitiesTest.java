@@ -6,7 +6,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * @author Deric Page (deric.page@nisc.coop) (ext 2335)
+ * @author Deric "Netzilla" Page (deric dot page at usa dot net)
  * @version %Id%
  * @since 9/3/14 1:44 PM
  */

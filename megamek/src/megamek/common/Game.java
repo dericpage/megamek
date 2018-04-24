@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import megamek.common.GameTurn.SpecificEntityTurn;
 import megamek.common.actions.ArtilleryAttackAction;
@@ -47,11 +48,16 @@ import megamek.common.event.GamePhaseChangeEvent;
 import megamek.common.event.GamePlayerChangeEvent;
 import megamek.common.event.GameSettingsChangeEvent;
 import megamek.common.event.GameTurnChangeEvent;
+import megamek.common.logging.DefaultMmLogger;
+import megamek.common.logging.MMLogger;
 import megamek.common.options.GameOptions;
 import megamek.common.options.OptionsConstants;
 import megamek.common.weapons.AttackHandler;
 import megamek.server.SmokeCloud;
 import megamek.server.victory.Victory;
+
+import static megamek.common.logging.LogLevel.ERROR;
+import static megamek.common.logging.LogLevel.WARNING;
 
 /**
  * The game class is the root of all data about the game in progress. Both the
@@ -66,12 +72,15 @@ public class Game implements Serializable,
      */
     private static final long serialVersionUID = 8376320092671792532L;
 
+    private final MMLogger logger;
+
     /**
      * Define constants to describe the condition a unit was in when it wass
      * removed from the game.
      */
 
     private GameOptions options = new GameOptions();
+    private final ReentrantReadWriteLock optionsLock = new ReentrantReadWriteLock();
 
     public IBoard board = new Board();
 
@@ -170,7 +179,15 @@ public class Game implements Serializable,
      * Constructor
      */
     public Game() {
-        // empty
+        this(null);
+    }
+
+    Game(final MMLogger logger) {
+        if (null == logger) {
+            this.logger = DefaultMmLogger.getInstance();
+        } else {
+            this.logger = logger;
+        }
     }
 
     // Added public accessors for external game id
@@ -326,15 +343,67 @@ public class Game implements Serializable,
         return vibrabombs.contains(mf);
     }
 
+    /**
+     * @deprecated Use {@link #booleanOption(String)}, {@link #stringOption(String)}, {@link #integerOption(String)}
+     * or {@link #floatOption(String)}
+     */
+    @Deprecated
     public GameOptions getOptions() {
-        return options;
+        optionsLock.readLock().lock();
+        try {
+            return options.copy();
+        } finally {
+            optionsLock.readLock().unlock();
+        }
+    }
+
+    public boolean booleanOption(final String optionName) {
+        optionsLock.readLock().lock();
+        try {
+            return options.booleanOption(optionName);
+        } finally {
+            optionsLock.readLock().unlock();
+        }
+    }
+
+    public String stringOption(final String optionName) {
+        optionsLock.readLock().lock();
+        try {
+            return options.stringOption(optionName);
+        } finally {
+            optionsLock.readLock().unlock();
+        }
+    }
+
+    public int integerOption(final String optionName) {
+        optionsLock.readLock().lock();
+        try {
+            return options.intOption(optionName);
+        } finally {
+            optionsLock.readLock().unlock();
+        }
+    }
+
+    public float floatOption(final String optionName) {
+        optionsLock.readLock().lock();
+        try {
+            return options.floatOption(optionName);
+        } finally {
+            optionsLock.readLock().unlock();
+        }
     }
 
     public void setOptions(final GameOptions options) {
         if (null == options) {
-            System.err.println("Can't set the game options to null!");
+            logger.log(getClass(), "setOptions(GameOptions)", ERROR,
+                       new RuntimeException("Can't set the game options to null!"));
         } else {
-            this.options = options;
+            optionsLock.writeLock().lock();
+            try {
+                this.options = options;
+            } finally {
+                optionsLock.writeLock().unlock();
+            }
             processGameEvent(new GameSettingsChangeEvent(this));
         }
     }
@@ -383,8 +452,7 @@ public class Game implements Serializable,
      */
     public void setupTeams() {
         final Vector<Team> initTeams = new Vector<>();
-        final boolean useTeamInit = getOptions().getOption(OptionsConstants.BASE_TEAM_INITIATIVE)
-                                                .booleanValue();
+        final boolean useTeamInit = booleanOption(OptionsConstants.BASE_TEAM_INITIATIVE);
 
         // Get all NO_TEAM players. If team_initiative is false, all
         // players are on their own teams for initiative purposes.
@@ -599,7 +667,7 @@ public class Game implements Serializable,
     public List<Entity> getValidTargets(final Entity entity) {
         final List<Entity> ents = new ArrayList<>();
 
-        final boolean friendlyFire = getOptions().booleanOption(OptionsConstants.BASE_FRIENDLY_FIRE);
+        final boolean friendlyFire = booleanOption(OptionsConstants.BASE_FRIENDLY_FIRE);
 
         for (final Entity otherEntity : entities) {
             // Even if friendly fire is acceptable, do not shoot yourself
@@ -1305,8 +1373,7 @@ public class Game implements Serializable,
         }
 
         // And... lets get this straight now.
-        if ((entity instanceof Mech)
-            && getOptions().booleanOption(OptionsConstants.RPG_CONDITIONAL_EJECTION)) {
+        if ((entity instanceof Mech) && booleanOption(OptionsConstants.RPG_CONDITIONAL_EJECTION)) {
             ((Mech) entity).setAutoEject(true);
             if (entity.hasCase()
                 || ((Mech) entity).hasCASEIIAnywhere()) {
@@ -1599,8 +1666,8 @@ public class Game implements Serializable,
                     // Sanity check
                     final HashSet<Coords> positions = e.getOccupiedCoords();
                     if (!positions.contains(coords)) {
-                        System.out.println("Game.getEntitiesVector(1) Error! "
-                                           + e.getDisplayName() + " is not in " + coords + "!");
+                        logger.log(getClass(), "getEntitiesVector(Coords, boolean)", ERROR,
+                                   new RuntimeException(e.getDisplayName() + " is not in " + coords + "!"));
                     }
                 }
             }
@@ -2119,11 +2186,10 @@ public class Game implements Serializable,
         // then we might not need to remove a turn at all.
         // A turn only needs to be removed when going from 4 inf (2 turns) to
         // 3 inf (1 turn)
-        if (getOptions().booleanOption(OptionsConstants.INIT_INF_MOVE_MULTI)
+        if (booleanOption(OptionsConstants.INIT_INF_MOVE_MULTI)
             && (entity instanceof Infantry)
             && (Phase.PHASE_MOVEMENT == phase)) {
-            if (1 != (getInfantryLeft(entity.getOwnerId()) % getOptions().intOption(
-                    OptionsConstants.INIT_INF_PROTO_MOVE_MULTI))) {
+            if (1 != (getInfantryLeft(entity.getOwnerId()) % integerOption(OptionsConstants.INIT_INF_PROTO_MOVE_MULTI))) {
                 // exception, if the _next_ turn is an infantry turn, remove
                 // that
                 // contrived, but may come up e.g. one inf accidently kills
@@ -2143,11 +2209,10 @@ public class Game implements Serializable,
             }
         }
         // Same thing but for protos
-        if (getOptions().booleanOption(OptionsConstants.INIT_PROTOS_MOVE_MULTI)
+        if (booleanOption(OptionsConstants.INIT_PROTOS_MOVE_MULTI)
             && (entity instanceof Protomech)
             && (Phase.PHASE_MOVEMENT == phase)) {
-            if (1 != (getProtomechsLeft(entity.getOwnerId()) % getOptions()
-                    .intOption(OptionsConstants.INIT_INF_PROTO_MOVE_MULTI))) {
+            if (1 != (getProtomechsLeft(entity.getOwnerId()) % integerOption(OptionsConstants.INIT_INF_PROTO_MOVE_MULTI))) {
                 // exception, if the _next_ turn is an protomek turn, remove
                 // that
                 // contrived, but may come up e.g. one inf accidently kills
@@ -2168,10 +2233,9 @@ public class Game implements Serializable,
         }
 
         // Same thing but for vehicles
-        if (getOptions().booleanOption(OptionsConstants.ADVGRNDMOV_VEHICLE_LANCE_MOVEMENT)
+        if (booleanOption(OptionsConstants.ADVGRNDMOV_VEHICLE_LANCE_MOVEMENT)
             && (entity instanceof Tank) && (Phase.PHASE_MOVEMENT == phase)) {
-            if (1 != (getVehiclesLeft(entity.getOwnerId()) % getOptions()
-                    .intOption(OptionsConstants.ADVGRNDMOV_VEHICLE_LANCE_MOVEMENT_NUMBER))) {
+            if (1 != (getVehiclesLeft(entity.getOwnerId()) % integerOption(OptionsConstants.ADVGRNDMOV_VEHICLE_LANCE_MOVEMENT_NUMBER))) {
                 // exception, if the _next_ turn is a tank turn, remove that
                 // contrived, but may come up e.g. one tank accidently kills
                 // another
@@ -2191,10 +2255,9 @@ public class Game implements Serializable,
         }
 
         // Same thing but for meks
-        if (getOptions().booleanOption(OptionsConstants.ADVGRNDMOV_MEK_LANCE_MOVEMENT)
+        if (booleanOption(OptionsConstants.ADVGRNDMOV_MEK_LANCE_MOVEMENT)
             && (entity instanceof Mech) && (Phase.PHASE_MOVEMENT == phase)) {
-            if (1 != (getMechsLeft(entity.getOwnerId()) % getOptions()
-                    .intOption(OptionsConstants.ADVGRNDMOV_MEK_LANCE_MOVEMENT_NUMBER))) {
+            if (1 != (getMechsLeft(entity.getOwnerId()) % integerOption(OptionsConstants.ADVGRNDMOV_MEK_LANCE_MOVEMENT_NUMBER))) {
                 // exception, if the _next_ turn is a mech turn, remove that
                 // contrived, but may come up e.g. one mech accidently kills
                 // another
@@ -2219,9 +2282,9 @@ public class Game implements Serializable,
         //  rules, then we may be removing an infantry unit that would be
         //  considered invalid unless we don't consider the extra validity
         //  checks.
-        if ((getOptions().booleanOption(OptionsConstants.INIT_INF_MOVE_LATER) &&
+        if ((booleanOption(OptionsConstants.INIT_INF_MOVE_LATER) &&
              (entity instanceof Infantry)) ||
-            (getOptions().booleanOption(OptionsConstants.INIT_PROTOS_MOVE_LATER) &&
+            (booleanOption(OptionsConstants.INIT_PROTOS_MOVE_LATER) &&
              (entity instanceof Protomech))) {
             useInfantryMoveLaterCheck = false;
         }
@@ -2409,7 +2472,7 @@ public class Game implements Serializable,
     }
 
     public void rollInitAndResolveTies() {
-        if (getOptions().booleanOption(OptionsConstants.RPG_INDIVIDUAL_INITIATIVE)) {
+        if (booleanOption(OptionsConstants.RPG_INDIVIDUAL_INITIATIVE)) {
             final Vector<TurnOrdered> vRerolls = new Vector<>();
             for (final Entity e : entities) {
                 if (initiativeRerollRequests.contains(getTeamForPlayer(e.getOwner()))) {
@@ -2419,16 +2482,16 @@ public class Game implements Serializable,
             TurnOrdered.rollInitAndResolveTies(getEntitiesVector(), vRerolls, false);
         } else {
             TurnOrdered.rollInitAndResolveTies(teams, initiativeRerollRequests,
-                                               getOptions().booleanOption(OptionsConstants.INIT_INITIATIVE_STREAK_COMPENSATION));
+                                               booleanOption(OptionsConstants.INIT_INITIATIVE_STREAK_COMPENSATION));
         }
         initiativeRerollRequests.removeAllElements();
 
     }
 
     public void handleInitiativeCompensation() {
-        if (getOptions().booleanOption(OptionsConstants.INIT_INITIATIVE_STREAK_COMPENSATION)) {
+        if (booleanOption(OptionsConstants.INIT_INITIATIVE_STREAK_COMPENSATION)) {
             TurnOrdered.resetInitiativeCompensation(teams,
-                                                    getOptions().booleanOption(OptionsConstants.INIT_INITIATIVE_STREAK_COMPENSATION));
+                                                    booleanOption(OptionsConstants.INIT_INITIATIVE_STREAK_COMPENSATION));
         }
     }
 
@@ -3014,10 +3077,10 @@ public class Game implements Serializable,
         for (final Entity entity : getPlayerEntities(getPlayer(playerId), false)) {
             boolean excluded = false;
             if ((entity instanceof Infantry)
-                && getOptions().booleanOption(OptionsConstants.INIT_INF_MOVE_LATER)) {
+                && booleanOption(OptionsConstants.INIT_INF_MOVE_LATER)) {
                 excluded = true;
             } else if ((entity instanceof Protomech)
-                       && getOptions().booleanOption(OptionsConstants.INIT_PROTOS_MOVE_LATER)) {
+                       && booleanOption(OptionsConstants.INIT_PROTOS_MOVE_LATER)) {
                 excluded = true;
             }
 
@@ -3206,7 +3269,8 @@ public class Game implements Serializable,
      */
     public void setIlluminatedPositions(final HashSet<Coords> ip) {
         if (null == ip) {
-            new RuntimeException("Illuminated Positions is null.").printStackTrace();
+            logger.log(getClass(), "setIlluminatedPositions(HashSet<Coords>)",
+                       new NullPointerException("Illuminated Positions is null."));
         }
         illuminatedPositions = ip;
         processGameEvent(new GameBoardChangeEvent(this));
@@ -3330,11 +3394,12 @@ public class Game implements Serializable,
     }
 
     public boolean gameTimerIsExpired() {
-        return ((getOptions().booleanOption(OptionsConstants.VICTORY_USE_GAME_TURN_LIMIT)) && (getRoundCount() == getOptions()
-                .intOption(OptionsConstants.VICTORY_GAME_TURN_LIMIT)));
+        return ((booleanOption(OptionsConstants.VICTORY_USE_GAME_TURN_LIMIT)) && (getRoundCount() == integerOption(
+                OptionsConstants.VICTORY_GAME_TURN_LIMIT)));
     }
 
     public void createVictoryConditions() {
+        //noinspection deprecation
         victory = new Victory(getOptions());
     }
 
@@ -3345,7 +3410,7 @@ public class Game implements Serializable,
     // a shortcut function for determining whether vectored movement is
     // applicable
     public boolean useVectorMove() {
-        return getOptions().booleanOption(OptionsConstants.ADVAERORULES_ADVANCED_MOVEMENT)
+        return booleanOption(OptionsConstants.ADVAERORULES_ADVANCED_MOVEMENT)
                && board.inSpace();
     }
 
@@ -3452,7 +3517,8 @@ public class Game implements Serializable,
 
     public void setPlanetaryConditions(final PlanetaryConditions conditions) {
         if (null == conditions) {
-            System.err.println("Can't set the planetary conditions to null!");
+            logger.log(getClass(), "setPlanetaryConditions(PlanetaryConditions)",
+                       new NullPointerException("Can't set the planetary conditions to null!"));
         } else {
             planetaryConditions.alterConditions(conditions);
             processGameEvent(new GameSettingsChangeEvent(this));
@@ -3543,6 +3609,8 @@ public class Game implements Serializable,
      */
     @SuppressWarnings("unused")
     private void checkPositionCacheConsistency() {
+        final String methodName = "checkPositionCacheConsistency()";
+
         // Sanity check on the position cache
         //  This could be removed once we are confident the cache is working
         final List<Integer> entitiesInCache = new ArrayList<>();
@@ -3563,25 +3631,25 @@ public class Game implements Serializable,
             && (Phase.PHASE_LOUNGE != getPhase())
             && (Phase.PHASE_INITIATIVE_REPORT != getPhase())
             && (Phase.PHASE_INITIATIVE != getPhase())) {
-            System.out.println("Entities vector has " + entities.size()
-                               + " but pos lookup cache has " + entitiesInCache.size()
-                               + " entities!");
+            logger.log(getClass(), methodName, WARNING, "Entities vector has " + entities.size() +
+                                                        " but pos lookup cache has " + entitiesInCache.size() +
+                                                        " entities!");
             final List<Integer> missingIds = new ArrayList<>();
             for (final Integer id : entitiesInVector) {
                 if (!entitiesInCache.contains(id)) {
                     missingIds.add(id);
                 }
             }
-            System.out.println("Missing ids: " + missingIds);
+            logger.log(getClass(), methodName, WARNING, "Missing ids: " + missingIds);
         }
         for (final Entity e : entities) {
             final HashSet<Coords> positions = e.getOccupiedCoords();
             for (final Coords coords : positions) {
                 final HashSet<Integer> ents = entityPosLookup.get(coords);
                 if ((null != ents) && !ents.contains(e.getId())) {
-                    System.out.println("Entity " + e.getId() + " is in "
-                                       + e.getPosition() + " however the position cache "
-                                       + "does not have it in that position!");
+                    logger.log(getClass(), methodName, WARNING, "Entity " + e.getId() + " is in " + e.getPosition() +
+                                                                " however the position cache does not have it in that " +
+                                                                "position!");
                 }
             }
         }
@@ -3593,10 +3661,9 @@ public class Game implements Serializable,
                 }
                 final HashSet<Coords> positions = e.getOccupiedCoords();
                 if (!positions.contains(coords)) {
-                    System.out.println("Entity Position Cache thinks Entity "
-                                       + eId + "is in " + coords
-                                       + " but the Entity thinks it's in "
-                                       + e.getPosition());
+                    logger.log(getClass(), methodName, WARNING, "Entity Position Cache thinks Entity " + eId +
+                                                                " is in " + coords + " but the Entity thinks it's in "
+                                                                + e.getPosition());
                 }
             }
         }

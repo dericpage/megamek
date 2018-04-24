@@ -17,6 +17,7 @@ package megamek.common.options;
 import java.io.Serializable;
 import java.util.Enumeration;
 import java.util.Vector;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class OptionGroup implements IBasicOptionGroup, Serializable {
 
@@ -26,6 +27,7 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
     private static final long serialVersionUID = 6445683666789832313L;
 
     private final Vector<String> optionNames = new Vector<>();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     private final String name;
     private String key;
@@ -39,7 +41,12 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
     OptionGroup(final String name,
                 final String key) {
         this.name = name;
-        this.key = key;
+        lock.writeLock().lock();
+        try {
+            this.key = key;
+        } finally {
+            lock.writeLock().lock();
+        }
     }
 
     /**
@@ -56,15 +63,30 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
     }
 
     public void setKey(final String key) {
-        this.key = key;
+        lock.writeLock().lock();
+        try {
+            this.key = key;
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public String getKey() {
-        return key;
+        lock.readLock().lock();
+        try {
+            return key;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public Enumeration<String> getOptionNames() {
-        return optionNames.elements();
+        lock.readLock().lock();
+        try {
+            return optionNames.elements();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     /**
@@ -77,8 +99,13 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
     void addOptionName(final String optionName) {
         // This check is a performance penalty, but we don't
         // allow duplicate option names
-        if (!optionNames.contains(optionName)) {
-            optionNames.addElement(optionName);
+        lock.writeLock().lock();
+        try {
+            if (!optionNames.contains(optionName)) {
+                optionNames.addElement(optionName);
+            }
+        } finally {
+            lock.writeLock().lock();
         }
     }
 

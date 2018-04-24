@@ -59,7 +59,7 @@ public class ChatProcessorTest {
     private static IPlayer mockHumanPlayerKirk;
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         mockHumanPlayerDave = Mockito.mock(IPlayer.class);
         mockHumanPlayerKirk = Mockito.mock(IPlayer.class);
         mockBotPlayerHal = Mockito.mock(IPlayer.class);
@@ -110,7 +110,7 @@ public class ChatProcessorTest {
     }
 
     @Test
-    public void testShouldBotAcknowledgeDefeat() throws Exception {
+    public void testShouldBotAcknowledgeDefeat() {
         final ChatProcessor chatProcessor = new ChatProcessor();
 
         // Test individual human victory.
@@ -691,7 +691,7 @@ public class ChatProcessorTest {
         mockPrincess.setBehaviorSettings(BehaviorSettingsFactory.getInstance().DEFAULT_BEHAVIOR);
         Mockito.doAnswer(new Answer<Object>() {
             @Override
-            public Object answer(final InvocationOnMock invocationOnMock) throws Throwable {
+            public Object answer(final InvocationOnMock invocationOnMock) {
                 final String msg = (String) invocationOnMock.getArguments()[3];
                 if ("speakerPlayer is NULL.".equalsIgnoreCase(msg)) {
                     Assert.fail("Should not reach this point.");

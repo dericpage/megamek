@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Parent class for options settings
@@ -31,6 +32,7 @@ public abstract class AbstractOptions implements IOptions, Serializable {
     private static final long serialVersionUID = 6406883135074654379L;
 
     private final Hashtable<String, IOption> optionsHash = new Hashtable<>();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     AbstractOptions() {
         initialize();
@@ -133,7 +135,12 @@ public abstract class AbstractOptions implements IOptions, Serializable {
      * @see megamek.common.IOptions#getOptions()
      */
     public Enumeration<IOption> getOptions() {
-        return optionsHash.elements();
+        lock.readLock().lock();
+        try {
+            return optionsHash.elements();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     /*
@@ -146,7 +153,12 @@ public abstract class AbstractOptions implements IOptions, Serializable {
     }
 
     public IOption getOption(final String name) {
-        return optionsHash.get(name);
+        lock.readLock().lock();
+        try {
+            return optionsHash.get(name);
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public boolean booleanOption(final String name) {
@@ -220,8 +232,13 @@ public abstract class AbstractOptions implements IOptions, Serializable {
                    final String name,
                    final int type,
                    final Object defaultValue) {
-        optionsHash.put(name, new Option(this, name, type, defaultValue));
-        getOptionsInfoImp().addOptionInfo(group, name);
+        lock.writeLock().lock();
+        try {
+            optionsHash.put(name, new Option(this, name, type, defaultValue));
+            getOptionsInfoImp().addOptionInfo(group, name);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     protected class GroupsEnumeration implements Enumeration<IOptionGroup> {
