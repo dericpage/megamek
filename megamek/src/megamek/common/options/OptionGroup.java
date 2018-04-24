@@ -25,9 +25,9 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
      */
     private static final long serialVersionUID = 6445683666789832313L;
 
-    private Vector<String> optionNames = new Vector<String>();
+    private final Vector<String> optionNames = new Vector<>();
 
-    private String name;
+    private final String name;
     private String key;
 
     /**
@@ -36,7 +36,8 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
      * @param name group name
      * @param key optional key
      */
-    public OptionGroup(String name, String key) {
+    OptionGroup(final String name,
+                final String key) {
         this.name = name;
         this.key = key;
     }
@@ -46,7 +47,7 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
      * 
      * @param name option name
      */
-    public OptionGroup(String name) {
+    OptionGroup(final String name) {
         this(name, ""); //$NON-NLS-1$
     }
 
@@ -54,7 +55,7 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
         return name;
     }
 
-    public void setKey(String key) {
+    public void setKey(final String key) {
         this.key = key;
     }
 
@@ -73,7 +74,7 @@ public class OptionGroup implements IBasicOptionGroup, Serializable {
      * 
      * @param optionName new option name
      */
-    public void addOptionName(String optionName) {
+    void addOptionName(final String optionName) {
         // This check is a performance penalty, but we don't
         // allow duplicate option names
         if (!optionNames.contains(optionName)) {
